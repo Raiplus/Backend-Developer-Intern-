@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Manager - Developer Assignment</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --bg-color: #f3f4f6;
+            --card-bg: #ffffff;
+            --text-main: #1f2937;
+            --danger: #ef4444;
+            --success: #10b981;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 500px;
+        }
+        .card {
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h2 { margin-top: 0; }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0 15px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover { background-color: #1d4ed8; }
+        .btn-danger { background-color: var(--danger); width: auto; padding: 5px 10px; font-size: 0.8rem;}
+        .btn-danger:hover { background-color: #b91c1c; }
+        
+        #msg-box {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            display: none;
+            text-align: center;
+        }
+        .error { background-color: #fee2e2; color: var(--danger); }
+        .success { background-color: #d1fae5; color: var(--success); }
+        
+        .task-list { list-style: none; padding: 0; }
+        .task-item {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            padding: 10px 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .toggle-link {
+            color: var(--primary);
+            cursor: pointer;
+            text-decoration: underline;
+            text-align: center;
+            display: block;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="msg-box"></div>
+
+    <div id="auth-section" class="card">
+        <h2 id="auth-title">Login</h2>
+        
+        <div id="register-fields" style="display: none;">
+            <input type="text" id="reg-name" placeholder="Full Name">
+            <select id="reg-role">
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+            </select>
+        </div>
+
+        <input type="email" id="email" placeholder="Email Address" required>
+        <input type="password" id="password" placeholder="Password" required>
+        
+        <button id="auth-btn" onclick="handleAuth()">Login</button>
+        <span class="toggle-link" onclick="toggleAuthMode()">Need an account? Register</span>
+    </div>
+
+    <div id="dashboard-section" class="card" style="display: none;">
+        <h2>Task Dashboard</h2>
+        <button onclick="logout()" style="background: #6b7280; margin-bottom: 20px;">Logout</button>
+        
+        <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+            <input type="text" id="task-title" placeholder="What needs to be done?" style="margin: 0;">
+            <button onclick="addTask()" style="width: auto; padding: 0 20px;">Add</button>
+        </div>
+
+        <ul class="task-list" id="tasks-container"></ul>
+    </div>
+</div>
+
+<script>
+    let isLoginMode = true;
+
+    //================================================ UTILITIES ====================================================
+    function showMessage(text, isError = false) {
+        console.log("Showing message:", text);
+        const msgBox = document.getElementById('msg-box');
+        msgBox.textContent = text;
+        msgBox.className = isError ? 'error' : 'success';
+        msgBox.style.display = 'block';
+        setTimeout(() => msgBox.style.display = 'none', 3000);
+    }
+
+    function toggleAuthMode() {
+        isLoginMode = !isLoginMode;
+        document.getElementById('auth-title').innerText = isLoginMode ? 'Login' : 'Register';
+        document.getElementById('auth-btn').innerText = isLoginMode ? 'Login' : 'Register';
+        document.getElementById('register-fields').style.display = isLoginMode ? 'none' : 'block';
+        document.querySelector('.toggle-link').innerText = isLoginMode ? 'Need an account? Register' : 'Have an account? Login';
+    }
+
+    //================================================ AUTHENTICATION FLOW ====================================================
+    async function handleAuth() {
+        console.log("Auth function triggered");
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        
+        if(!email || !password) return showMessage('Email and password required', true);
+
+        const endpoint = isLoginMode ? '/api/v1/auth/login' : '/api/v1/auth/register';
+        const payload = { email, password };
+
+        if (!isLoginMode) {
+            payload.name = document.getElementById('reg-name').value;
+            payload.role = document.getElementById('reg-role').value;
+        }
+
+        try {
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+
+            if (!res.ok) throw new Error(data.error || 'Authentication failed');
+
+            if (isLoginMode) {
+                console.log("Login successful, switching to dashboard");
+                document.getElementById('auth-section').style.display = 'none';
+                document.getElementById('dashboard-section').style.display = 'block';
+                fetchTasks();
+                showMessage('Logged in successfully');
+            } else {
+                console.log("Registration successful");
+                showMessage('Registration successful! Please login.');
+                toggleAuthMode();
+            }
+        } catch (err) {
+            console.error("Auth error:", err.message);
+            showMessage(err.message, true);
+        }
+    }
+
+    async function logout() {
+        console.log("Logout triggered");
+        try {
+            await fetch('/api/v1/auth/logout', { method: 'POST' });
+            location.reload();
+        } catch (err) {
+            console.error("Logout failed", err);
+        }
+    }
+
+    //================================================ TASKS CRUD FLOW ====================================================
+    async function fetchTasks() {
+        console.log("Fetching tasks from API...");
+        try {
+            const res = await fetch('/api/v1/tasks');
+            if(res.status === 401 || res.status === 403) {
+                console.log("Unauthorized access, logging out");
+                return logout();
+            }
+            
+            const tasks = await res.json();
+            const container = document.getElementById('tasks-container');
+            container.innerHTML = '';
+
+            tasks.forEach(task => {
+                const li = document.createElement('li');
+                li.className = 'task-item';
+                li.innerHTML = `
+                    <span>${task.title}</span>
+                    <button class="btn-danger" onclick="deleteTask('${task._id}')">Delete</button>
+                `;
+                container.appendChild(li);
+            });
+        } catch (err) {
+            console.error("Fetch tasks error");
+            showMessage('Failed to load tasks', true);
+        }
+    }
+
+    async function addTask() {
+        console.log("Add task triggered");
+        const titleInput = document.getElementById('task-title');
+        if (!titleInput.value) return showMessage('Task title cannot be empty', true);
+
+        try {
+            const res = await fetch('/api/v1/tasks', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: titleInput.value })
+            });
+            if (res.ok) {
+                console.log("Task successfully added");
+                titleInput.value = '';
+                fetchTasks();
+                showMessage('Task added');
+            }
+        } catch (err) {
+            console.error("Add task error");
+            showMessage('Error adding task', true);
+        }
+    }
+
+    async function deleteTask(id) {
+        console.log("Delete task triggered for ID:", id);
+        try {
+            const res = await fetch(`/api/v1/tasks/${id}`, { method: 'DELETE' });
+            if (res.ok) fetchTasks();
+        } catch (err) {
+            console.error("Delete task error");
+            showMessage('Error deleting task', true);
+        }
+    }
+</script>
+
+</body>
+</html>
